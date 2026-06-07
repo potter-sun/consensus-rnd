@@ -188,7 +188,7 @@ def _find_log_exceptions(log_dir: Path) -> tuple[PatrolFinding, ...]:
     findings = []
     for path in sorted(log_dir.glob("*.log"))[-200:]:
         lines = _read_tail_or_fail(path, 80)
-        matched = [line for line in lines if _line_has_exception_signal(line)]
+        matched = _log_exception_evidence(lines)
         if not matched:
             continue
         findings.append(
@@ -274,9 +274,31 @@ def _item_ref(item: GhItem | Mapping[str, object]) -> str:
     return f"{kind or 'item'} #{number or '?'}"
 
 
-def _line_has_exception_signal(line: str) -> bool:
-    lowered = line.lower()
-    return any(token in lowered for token in ("traceback", "exception", "runtimeerror", "fatal:", "failed"))
+def _log_exception_evidence(lines: Sequence[str]) -> tuple[str, ...]:
+    clean_exit = False
+    matched: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        lowered = stripped.lower()
+        if stripped.startswith("EXIT="):
+            exit_code = stripped.removeprefix("EXIT=").strip()
+            clean_exit = exit_code == "0"
+            if exit_code and exit_code != "0":
+                matched.append(line)
+            continue
+        if lowered.startswith("spawn_failed=") or lowered.startswith("post_failed:"):
+            matched.append(line)
+            continue
+        if (
+            "traceback" in lowered
+            or "runtimeerror:" in lowered
+            or "fatal:" in lowered
+            or "error:" in lowered
+        ):
+            matched.append(line)
+    if clean_exit:
+        return ()
+    return tuple(matched[-10:])
 
 
 def _read_tail_or_fail(path: Path, max_lines: int) -> tuple[str, ...]:

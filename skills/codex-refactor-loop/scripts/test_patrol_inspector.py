@@ -61,7 +61,7 @@ class PatrolInspectorTests(unittest.TestCase):
         )
 
     def test_run_once_publishes_findings_and_writes_dashboard_state(self) -> None:
-        (self.tmp / ".refactor-loop" / "logs" / "router.log").write_text("FATAL: failed\n", encoding="utf-8")
+        (self.tmp / ".refactor-loop" / "logs" / "router.log").write_text("FATAL: failed\nEXIT=1\n", encoding="utf-8")
         publisher = FakePublisher()
         inspector = PatrolInspector(
             self.ctx,
@@ -78,8 +78,83 @@ class PatrolInspectorTests(unittest.TestCase):
         self.assertEqual(1, len(state["findings"]))
         self.assertEqual(1, len(state["published"]))
 
+    def test_clean_exit_suppresses_recovered_exception_transcript(self) -> None:
+        (self.tmp / ".refactor-loop" / "logs" / "router.log").write_text(
+            "Traceback (most recent call last):\n"
+            "RuntimeError: transient worker error\n"
+            "retry recovered\n"
+            "EXIT=0\n",
+            encoding="utf-8",
+        )
+
+        findings = PatrolInspector(self.ctx, github_items=()).collect_findings()
+
+        self.assertNotIn("exception-log", {finding.kind for finding in findings})
+
+    def test_clean_exit_suppresses_exception_terms_without_marker_or_artifact(self) -> None:
+        (self.tmp / ".refactor-loop" / "logs" / "router.log").write_text(
+            "worker failed once\n"
+            "exception was mentioned in retry prose\n"
+            "FATAL: transient setup failed\n"
+            "EXIT=0\n",
+            encoding="utf-8",
+        )
+
+        findings = PatrolInspector(self.ctx, github_items=()).collect_findings()
+
+        self.assertEqual((), findings)
+
+    def test_nonzero_exit_reports_exception_log_finding(self) -> None:
+        (self.tmp / ".refactor-loop" / "logs" / "router.log").write_text("worker complete\nEXIT=1\n", encoding="utf-8")
+
+        findings = PatrolInspector(self.ctx, github_items=()).collect_findings()
+
+        exception_findings = [finding for finding in findings if finding.kind == "exception-log"]
+        self.assertEqual(1, len(exception_findings))
+        self.assertEqual(("EXIT=1",), exception_findings[0].evidence)
+
+    def test_spawn_failed_reports_exception_log_finding(self) -> None:
+        (self.tmp / ".refactor-loop" / "logs" / "router.log").write_text(
+            "SPAWN_FAILED=codex binary unavailable\n",
+            encoding="utf-8",
+        )
+
+        findings = PatrolInspector(self.ctx, github_items=()).collect_findings()
+
+        exception_findings = [finding for finding in findings if finding.kind == "exception-log"]
+        self.assertEqual(1, len(exception_findings))
+        self.assertEqual(("SPAWN_FAILED=codex binary unavailable",), exception_findings[0].evidence)
+
+    def test_post_failed_reports_exception_log_finding(self) -> None:
+        (self.tmp / ".refactor-loop" / "logs" / "router.log").write_text(
+            "POST_FAILED: gh comment rejected\n",
+            encoding="utf-8",
+        )
+
+        findings = PatrolInspector(self.ctx, github_items=()).collect_findings()
+
+        exception_findings = [finding for finding in findings if finding.kind == "exception-log"]
+        self.assertEqual(1, len(exception_findings))
+        self.assertEqual(("POST_FAILED: gh comment rejected",), exception_findings[0].evidence)
+
+    def test_traceback_without_clean_exit_reports_exception_log_finding(self) -> None:
+        (self.tmp / ".refactor-loop" / "logs" / "router.log").write_text(
+            "Traceback (most recent call last):\n"
+            "RuntimeError: unrecovered\n",
+            encoding="utf-8",
+        )
+
+        findings = PatrolInspector(self.ctx, github_items=()).collect_findings()
+
+        exception_findings = [finding for finding in findings if finding.kind == "exception-log"]
+        self.assertEqual(1, len(exception_findings))
+        self.assertEqual(
+            ("Traceback (most recent call last):", "RuntimeError: unrecovered"),
+            exception_findings[0].evidence,
+        )
+
     def test_snapshot_load_failure_is_visible_and_blocks_publication(self) -> None:
-        (self.tmp / ".refactor-loop" / "logs" / "router.log").write_text("FATAL: failed\n", encoding="utf-8")
+        (self.tmp / ".refactor-loop" / "logs" / "router.log").write_text("FATAL: failed\nEXIT=1\n", encoding="utf-8")
         publisher = FakePublisher()
         inspector = PatrolInspector(
             self.ctx,
