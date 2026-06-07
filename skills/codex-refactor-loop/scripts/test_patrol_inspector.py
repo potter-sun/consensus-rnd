@@ -60,6 +60,56 @@ class PatrolInspectorTests(unittest.TestCase):
             {finding.kind for finding in findings},
         )
 
+    def test_clean_review_log_prose_does_not_create_exception_log_finding(self) -> None:
+        clean_log = "\n".join(
+            (
+                "review completed with EXIT=0",
+                "216 passed in 12.3s",
+                "tests passed",
+                "test_runtime_exception_authorization_sources.py passed",
+                "authorizations/runtime-exceptions.md runtime exception mirror updated",
+                "ordinary prose says exception and failed without a structured diagnostic",
+                "  POST_FAILED: prompt example should stay inert",
+                "  SPAWN_FAILED=example in prompt text should stay inert",
+                "+POST_FAILED: diff hunk should stay inert",
+                "-SPAWN_FAILED: removed diff hunk should stay inert",
+                '{"body": "POST_FAILED: escaped comment body should stay inert"}',
+                '{"body": "SPAWN_FAILED=escaped comment body should stay inert"}',
+            )
+        )
+        (self.tmp / ".refactor-loop" / "logs" / "review.log").write_text(clean_log + "\n", encoding="utf-8")
+
+        findings = PatrolInspector(self.ctx, github_items=()).collect_findings()
+
+        self.assertNotIn("exception-log", {finding.kind for finding in findings})
+
+    def test_structured_exception_log_signals_create_exception_log_findings(self) -> None:
+        signal_lines = (
+            "Traceback (most recent call last):",
+            "RuntimeError: broken",
+            "ValueError: bad value",
+            "SomethingException: broken",
+            "SomethingError: broken",
+            "FATAL: unrecoverable",
+            "ERROR: failed step",
+            "CRITICAL: corrupted state",
+            "EXIT=1",
+            "POST_FAILED: comment post failed",
+            "SPAWN_FAILED: worker spawn failed",
+            "SPAWN_FAILED=worker spawn failed",
+            "FAILED:",
+            "FAILED: route failed",
+        )
+        for index, line in enumerate(signal_lines):
+            (self.tmp / ".refactor-loop" / "logs" / f"signal-{index}.log").write_text(f"ok\n{line}\n", encoding="utf-8")
+
+        findings = PatrolInspector(self.ctx, github_items=()).collect_findings()
+        exception_findings = [finding for finding in findings if finding.kind == "exception-log"]
+
+        self.assertEqual(len(signal_lines), len(exception_findings))
+        evidence = {finding.evidence[-1] for finding in exception_findings}
+        self.assertEqual(set(signal_lines), evidence)
+
     def test_run_once_publishes_findings_and_writes_dashboard_state(self) -> None:
         (self.tmp / ".refactor-loop" / "logs" / "router.log").write_text("FATAL: failed\n", encoding="utf-8")
         publisher = FakePublisher()

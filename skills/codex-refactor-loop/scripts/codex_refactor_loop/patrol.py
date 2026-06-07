@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -275,8 +276,14 @@ def _item_ref(item: GhItem | Mapping[str, object]) -> str:
 
 
 def _line_has_exception_signal(line: str) -> bool:
-    lowered = line.lower()
-    return any(token in lowered for token in ("traceback", "exception", "runtimeerror", "fatal:", "failed"))
+    if line.startswith(("Traceback", "FATAL:", "ERROR:", "CRITICAL:", "POST_FAILED:", "SPAWN_FAILED:", "SPAWN_FAILED=")):
+        return True
+    if re.match(r"^[A-Za-z_][A-Za-z0-9_.]*(?:Exception|Error):", line):
+        return True
+    if re.match(r"^FAILED(?::|\s*$)", line):
+        return True
+    exit_match = re.match(r"^EXIT=(\d+)\s*$", line)
+    return bool(exit_match and int(exit_match.group(1)) != 0)
 
 
 def _read_tail_or_fail(path: Path, max_lines: int) -> tuple[str, ...]:
