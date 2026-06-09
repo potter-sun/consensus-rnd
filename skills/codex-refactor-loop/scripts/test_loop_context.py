@@ -134,11 +134,36 @@ class LoopContextTests(unittest.TestCase):
         self.assertNotIn("CONSENSUS_RND_HOST_ENV", child_env)
         self.assertEqual(str(self.repo.resolve()), child_env["REPO_ROOT"])
 
-    def test_consensus_rnd_host_env_rejects_repo_outside_and_parent_segments(self) -> None:
+    def test_consensus_rnd_host_env_accepts_external_control_repo_path_with_repo_root(self) -> None:
         outside = self.tmp_root / "outside.env"
-        outside.write_text(f'export REPO_ROOT="{self.repo}"\n', encoding="utf-8")
+        outside.write_text(
+            "\n".join(
+                (
+                    f'export REPO_ROOT="{self.repo}"',
+                    'export GH_REPO_SLUG="owner/repo"',
+                    'export BUILD_CMD="make build"',
+                    "",
+                )
+            ),
+            encoding="utf-8",
+        )
 
-        cases = (str(outside), "../outside.env", "", ".config/../host.env")
+        ctx = LoopContext.load(cwd=self.repo, env={"CONSENSUS_RND_HOST_ENV": str(outside)})
+
+        self.assertEqual(self.repo.resolve(), ctx.repo_root)
+        self.assertEqual(outside.resolve(), HostEnvLocator.resolve(self.repo, {"CONSENSUS_RND_HOST_ENV": str(outside)}, self.repo).path)
+        self.assertEqual("make build", ctx.host_env["BUILD_CMD"])
+        self.assertEqual("owner/repo", ctx.gh_repo_slug)
+
+    def test_external_consensus_rnd_host_env_requires_repo_root_when_inferred_from_cwd(self) -> None:
+        outside = self.tmp_root / "outside.env"
+        outside.write_text('export GH_REPO_SLUG="owner/repo"\n', encoding="utf-8")
+
+        with self.assertRaisesRegex(LoopContextError, "external CONSENSUS_RND_HOST_ENV must define REPO_ROOT"):
+            LoopContext.load(cwd=self.repo, env={"CONSENSUS_RND_HOST_ENV": str(outside)})
+
+    def test_consensus_rnd_host_env_rejects_parent_segments_empty_and_missing(self) -> None:
+        cases = ("../outside.env", "", ".config/../host.env", ".config/consensus-rnd/missing.env")
         for raw in cases:
             with self.subTest(raw=raw):
                 with self.assertRaises(LoopContextError):

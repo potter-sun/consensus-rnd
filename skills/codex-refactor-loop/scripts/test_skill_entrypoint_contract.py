@@ -685,7 +685,7 @@ class SkillEntrypointContractTests(unittest.TestCase):
         )
         for needle in (
             "$CONSENSUS_RND_HOST_ENV",
-            "locates the host-owned `host.env` loop runtime injection file",
+            "locates the host-owned or control-repository-owned `host.env` loop runtime injection file",
             "not host production configuration schema",
             "no `.refactor-loop/host.env` fallback is read",
             "`.refactor-loop/` is the skill-private runtime home",

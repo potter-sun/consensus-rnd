@@ -191,10 +191,6 @@ class HostEnvLocator:
         if any(part == ".." for part in candidate.parts):
             raise LoopContextError(f"{cls.EXPLICIT_ENV} must not contain '..': {raw_value}")
         path = (candidate if candidate.is_absolute() else repo_root / candidate).resolve()
-        try:
-            path.relative_to(repo_root)
-        except ValueError as exc:
-            raise LoopContextError(f"{cls.EXPLICIT_ENV} must point inside REPO_ROOT: {raw_value}") from exc
         if not path.is_file():
             raise LoopContextError(f"{cls.EXPLICIT_ENV} is not a readable file: {raw_value}")
         return path
@@ -209,6 +205,10 @@ def _host_env_repo_root_from_cwd(env: Mapping[str, str], cwd: str | Path | None)
     raw_root = values.get("REPO_ROOT")
     if raw_root:
         return _existing_dir(raw_root, "host.env REPO_ROOT")
+    try:
+        location.path.resolve().relative_to(base.resolve())
+    except ValueError as exc:
+        raise LoopContextError("external CONSENSUS_RND_HOST_ENV must define REPO_ROOT") from exc
     return base.resolve()
 
 

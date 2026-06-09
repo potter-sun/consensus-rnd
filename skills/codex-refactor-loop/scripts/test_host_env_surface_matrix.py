@@ -195,6 +195,7 @@ class HostEnvSurfaceMatrixTests(unittest.TestCase):
         self.assertEqual("HostEnvLocator", locator["Owner"])
         self.assertEqual("LoopContext locator", locator["Consumer"])
         self.assertIn("required for host fact loading", locator["Missing/empty behavior"])
+        self.assertIn("external paths must export `$REPO_ROOT`", locator["Missing/empty behavior"])
         self.assertIn("no `.refactor-loop/host.env` fallback is read", locator["Missing/empty behavior"])
         self.assertIn("not host production config schema", locator["Missing/empty behavior"])
         self.assertIn("test_loop_context.py", locator["Test owner"])

@@ -87,13 +87,13 @@ Owner map:
   that matrix.
 -->
 These variables are injected by the host project. The skill must not hardcode project facts.
-`CONSENSUS_RND_HOST_ENV` locates the host-owned `host.env` loop runtime injection file; it is the only runtime locator for host facts and is not a host production config schema.
+`CONSENSUS_RND_HOST_ENV` locates the host-owned or control-repository-owned `host.env` loop runtime injection file; it is the only runtime locator for host facts and is not a host production config schema.
 ### Host env surface matrix
 This matrix is the only manually maintained host.env contract. `host.env.example` is a copyable template view; tests derive its expected exports, categories, defaults, and prompt placeholders from this table.
 
 | Variable | Category | Owner | Default/example | Missing/empty behavior | Consumer | Test owner |
 |---|---|---|---|---|---|---|
-| `$CONSENSUS_RND_HOST_ENV` | required | HostEnvLocator | repo-relative host-owned path, e.g. `.config/consensus-rnd/host.env` | required for host fact loading; when set it must be repo-relative or repo-contained absolute; missing, empty, unreadable, or invalid locators fail closed; no `.refactor-loop/host.env` fallback is read; it is not host production config schema | LoopContext locator | `test_loop_context.py`, `test_host_env_surface_matrix.py` |
+| `$CONSENSUS_RND_HOST_ENV` | required | HostEnvLocator | repo-relative host-owned path, e.g. `.config/consensus-rnd/host.env`, or an absolute control-repository path whose file exports `$REPO_ROOT` | required for host fact loading; when set it must be repo-relative, repo-contained absolute, or an absolute control-repository path; external paths must export `$REPO_ROOT`; missing, empty, unreadable, or invalid locators fail closed; no `.refactor-loop/host.env` fallback is read; it is not host production config schema | LoopContext locator | `test_loop_context.py`, `test_host_env_surface_matrix.py` |
 | `$REPO_ROOT` | required | LoopContext | host absolute repo path | fail closed; do not infer from cwd unless an explicit read-only fallback test allows it | LoopContext | `test_loop_context.py` |
 | `$GH_REPO_SLUG` | required | LoopContext | `OWNER/REPO` | fail closed for GitHub operations when absent or not `OWNER/REPO`; preferred slug | LoopContext, release-gate | `test_loop_context.py`, `test_auto_release_gate.py` |
 | `$GH_OWNER` | compatibility | LoopContext | optional owner fallback | noop when `$GH_REPO_SLUG` is present; used only with `$GH_REPO_NAME` compatibility construction | LoopContext | `test_loop_context.py` |
@@ -158,7 +158,7 @@ Host config rules:
 1. `host.env` is the only loop runtime fact injection point. It is not host production configuration schema.
 2. `GH_REPO` must not be exported as a bare repo name; use `GH_REPO_SLUG`.
 3. `CI_GUARDS` is optional. Use `[ -n "${CI_GUARDS:-}" ]` before invoking it and report `guards skipped: CI_GUARDS unset` when absent.
-4. Source host-owned `$CONSENSUS_RND_HOST_ENV` before daemon or codex supervision commands; if unset, fail closed and ask the host to set the explicit locator.
+4. Source `$CONSENSUS_RND_HOST_ENV` before daemon or codex supervision commands; it may point to a host-owned file inside `$REPO_ROOT` or to an external control-repository file that exports `$REPO_ROOT`. If unset, fail closed and ask the host to set the explicit locator; no legacy `.refactor-loop/host.env` fallback is read.
 5. `$BUILD_CMD` and `$TEST_CMD` are shell command strings. They may contain `cd`, `&&`, pipes, and host script invocations; callers must run `bash -lc "$BUILD_CMD"` / `bash -lc "$TEST_CMD"` or an equivalent sourced shell invocation, never split them into argv.
 6. Detailed daemon start examples live in [daemon command bodies](#daemon-command-bodies), including the `bash -c 'test -n "${CONSENSUS_RND_HOST_ENV:-}" && source "$CONSENSUS_RND_HOST_ENV" && exec'` pattern and why `env $(grep ...)` is unsafe.
 7. Runtime scripts must consume host.env through LoopContext or the shared parser in context.py; root host.env and unlisted aliases such as INTEGRATION, REVIEW_BASE, and WORKTREE are not compatibility inputs.
